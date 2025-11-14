@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>サイト確認くん - セキュリティチェッカー</title>
+    <style>
+        /* --- CSS（ページの見た目を整える） --- */
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        #urlInput {
+            width: 500px;
+            padding: 10px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-left: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        /* セキュリティチェック結果 */
+        #securityCheck {
+            margin-top: 20px;
+        }
+        .check-section {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        .check-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .check-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            margin: 5px 0;
+            background-color: white;
+            border-radius: 3px;
+        }
+        .check-item.good {
+            border-left: 3px solid #4CAF50;
+        }
+        .check-item.warning {
+            border-left: 3px solid #ff9800;
+        }
+        .check-item.bad {
+            border-left: 3px solid #f44336;
+        }
+        .status-icon {
+            margin-right: 10px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        .good .status-icon {
+            color: #4CAF50;
+        }
+        .warning .status-icon {
+            color: #ff9800;
+        }
+        .bad .status-icon {
+            color: #f44336;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .error {
+            color: #f44336;
+            padding: 20px;
+            background-color: #ffebee;
+            border-radius: 5px;
+        }
+        
+        /* --- iframeチェック用 --- */
+        #iframeContainer {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 600px;
+            border: 2px dashed #aaa;
+            margin-top: 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        #victimFrame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            opacity: 0.5; 
+            border-radius: 5px;
+        }
+        .message {
+            padding: 20px;
+            text-align: center;
+            color: #555;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            border-bottom: 2px solid #ddd;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background-color: #f0f0f0;
+            border: none;
+            border-radius: 5px 5px 0 0;
+            font-size: 16px;
+        }
+        .tab.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px 0;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 サイト確認くん - セキュリティチェッカー</h1>
+        <p>WebサイトのセキュリティヘッダーとSSL証明書情報をチェックします。</p>
+
+        <div>
+            <label for="urlInput">URL:</label>
+            <input type="text" id="urlInput" placeholder="https://example.com">
+            <button id="checkButton">チェック開始</button>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('security')">セキュリティチェック</button>
+            <button class="tab" onclick="switchTab('clickjacking')">クリックジャッキング確認</button>
+        </div>
+
+        <div id="securityTab" class="tab-content active">
+            <div id="securityCheck"></div>
+        </div>
+
+        <div id="clickjackingTab" class="tab-content">
+            <h2>クリックジャッキング・ビジュアルチェック</h2>
+            <p>このサイトがiframe内に透過表示されるか確認します。</p>
+            <div id="iframeContainer">
+                <div class="message">チェック開始ボタンを押すとここに表示されます...</div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        let currentUrl = '';
+        
+        // タブ切り替え
+        function switchTab(tabName) {
+            const tabs = document.querySelectorAll('.tab');
+            const contents = document.querySelectorAll('.tab-content');
+            
+            tabs.forEach(tab => tab.classList.remove('active'));
+            contents.forEach(content => content.classList.remove('active'));
+            
+            if (tabName === 'security') {
+                tabs[0].classList.add('active');
+                document.getElementById('securityTab').classList.add('active');
+            } else {
+                tabs[1].classList.add('active');
+                document.getElementById('clickjackingTab').classList.add('active');
+            }
+        }
+        
+        // メインチェック処理
+        document.getElementById('checkButton').addEventListener('click', async function() {
+            let url = document.getElementById('urlInput').value;
+            
+            if (!url) {
+                alert('URLを入力してください。');
+                return;
+            }
+
+            // URLが 'http://' や 'https://' で始まらない場合、 'https://' を補う
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                url = 'https://' + url;
+                document.getElementById('urlInput').value = url;
+            }
+            
+            currentUrl = url;
+            
+            // セキュリティチェックを実行
+            await checkSecurity(url);
+            
+            // iframeも読み込む
+            loadIframe(url);
+        });
+        
+        // セキュリティチェック
+        async function checkSecurity(url) {
+            const securityCheck = document.getElementById('securityCheck');
+            securityCheck.innerHTML = '<div class="loading">🔍 チェック中...</div>';
+            
+            try {
+                // ヘッダー情報をチェック
+                const response = await fetch(url, { 
+                    method: 'HEAD',
+                    mode: 'cors'
+                }).catch(() => fetch(url, { mode: 'cors' }));
+                
+                const headers = {};
+                for (let [key, value] of response.headers.entries()) {
+                    headers[key.toLowerCase()] = value;
+                }
+                
+                // SSL証明書情報（ブラウザ制限のため限定的）
+                const sslInfo = checkSSL(url);
+                
+                // 結果を表示
+                displayResults(headers, sslInfo, url);
+                
+            } catch (error) {
+                // CORS制限がある場合の代替チェック
+                securityCheck.innerHTML = `
+                    <div class="check-section">
+                        <h3>⚠️ CORS制限について</h3>
+                        <p>ブラウザのセキュリティ制限により、直接ヘッダー情報を取得できませんでした。</p>
+                        <p>より詳細なチェックを行うには、以下の方法があります：</p>
+                        <ul>
+                            <li>ブラウザの開発者ツール（F12）でネットワークタブを確認</li>
+                            <li><a href="https://securityheaders.com/?q=${encodeURIComponent(url)}" target="_blank">SecurityHeaders.com</a>で確認</li>
+                            <li><a href="https://www.ssllabs.com/ssltest/analyze.html?d=${encodeURIComponent(new URL(url).hostname)}" target="_blank">SSL Labs</a>で証明書を確認</li>
+                        </ul>
+                    </div>
+                    <div class="check-section">
+                        <h3>🔍 基本チェック</h3>
+                        ${getBasicChecks(url)}
+                    </div>
+                `;
+            }
+        }
+        
+        // 基本的なチェック項目
+        function getBasicChecks(url) {
+            const urlObj = new URL(url);
+            let html = '';
+            
+            // HTTPSチェック
+            if (urlObj.protocol === 'https:') {
+                html += `<div class="check-item good">
+                    <span class="status-icon">✓</span>
+                    <span><strong>HTTPS:</strong> 使用しています（推奨）</span>
+                </div>`;
+            } else {
+                html += `<div class="check-item bad">
+                    <span class="status-icon">✗</span>
+                    <span><strong>HTTPS:</strong> HTTPSを使用していません</span>
+                </div>`;
+            }
+            
+            return html;
+        }
+        
+        // 結果表示
+        function displayResults(headers, sslInfo, url) {
+            const securityCheck = document.getElementById('securityCheck');
+            
+            // セキュリティヘッダーのチェック
+            const headerChecks = [
+                {
+                    name: 'Content-Security-Policy (CSP)',
+                    key: 'content-security-policy',
+                    description: 'XSS攻撃を防ぐセキュリティポリシー'
+                },
+                {
+                    name: 'Strict-Transport-Security (HSTS)',
+                    key: 'strict-transport-security',
+                    description: 'HTTPSの強制使用を指示'
+                },
+                {
+                    name: 'X-Frame-Options',
+                    key: 'x-frame-options',
+                    description: 'クリックジャッキング攻撃を防止'
+                },
+                {
+                    name: 'Cache-Control',
+                    key: 'cache-control',
+                    description: 'キャッシュの制御'
+                },
+                {
+                    name: 'X-Content-Type-Options',
+                    key: 'x-content-type-options',
+                    description: 'MIMEタイプスニッフィングを防止'
+                }
+            ];
+            
+            let html = '<div class="check-section"><h3>🛡️ セキュリティヘッダー</h3>';
+            
+            headerChecks.forEach(check => {
+                const value = headers[check.key];
+                if (value) {
+                    html += `<div class="check-item good">
+                        <span class="status-icon">✓</span>
+                        <div>
+                            <strong>${check.name}:</strong> ${value}<br>
+                            <small style="color: #666;">${check.description}</small>
+                        </div>
+                    </div>`;
+                } else {
+                    html += `<div class="check-item warning">
+                        <span class="status-icon">⚠</span>
+                        <div>
+                            <strong>${check.name}:</strong> 設定されていません<br>
+                            <small style="color: #666;">${check.description}</small>
+                        </div>
+                    </div>`;
+                }
+            });
+            
+            html += '</div>';
+            
+            // SSL証明書情報
+            html += '<div class="check-section"><h3>🔐 SSL/TLS証明書</h3>';
+            html += sslInfo;
+            html += `<div class="check-item good">
+                <span class="status-icon">ℹ️</span>
+                <div>
+                    <strong>詳細確認:</strong> <a href="https://www.ssllabs.com/ssltest/analyze.html?d=${encodeURIComponent(new URL(url).hostname)}" target="_blank">SSL Labsで詳細チェック</a>
+                </div>
+            </div>`;
+            html += '</div>';
+            
+            // その他の重要ヘッダー
+            html += '<div class="check-section"><h3>📋 その他の重要ヘッダー</h3>';
+            
+            const otherHeaders = [
+                'x-xss-protection',
+                'referrer-policy',
+                'permissions-policy',
+                'cross-origin-opener-policy',
+                'cross-origin-resource-policy',
+                'cross-origin-embedder-policy'
+            ];
+            
+            otherHeaders.forEach(headerKey => {
+                const value = headers[headerKey];
+                if (value) {
+                    html += `<div class="check-item good">
+                        <span class="status-icon">✓</span>
+                        <span><strong>${headerKey}:</strong> ${value}</span>
+                    </div>`;
+                }
+            });
+            
+            html += '</div>';
+            
+            securityCheck.innerHTML = html;
+        }
+        
+        // SSL証明書の基本チェック
+        function checkSSL(url) {
+            const urlObj = new URL(url);
+            let html = '';
+            
+            if (urlObj.protocol === 'https:') {
+                html += `<div class="check-item good">
+                    <span class="status-icon">✓</span>
+                    <span><strong>HTTPS接続:</strong> 暗号化通信を使用しています</span>
+                </div>`;
+                
+                html += `<div class="check-item warning">
+                    <span class="status-icon">ℹ️</span>
+                    <div>
+                        <strong>証明書の詳細:</strong> ブラウザのアドレスバーの鍵アイコンをクリックして確認してください<br>
+                        <small style="color: #666;">発行者、有効期限、鍵の種類などを確認できます</small>
+                    </div>
+                </div>`;
+            } else {
+                html += `<div class="check-item bad">
+                    <span class="status-icon">✗</span>
+                    <span><strong>HTTP接続:</strong> 暗号化されていません（非推奨）</span>
+                </div>`;
+            }
+            
+            return html;
+        }
+        
+        // iframe読み込み
+        function loadIframe(url) {
+            const container = document.getElementById('iframeContainer');
+            container.innerHTML = ''; 
+
+            const iframe = document.createElement('iframe');
+            iframe.id = 'victimFrame';
+            iframe.src = url;
+
+            iframe.onload = function() {
+                try {
+                    const x = iframe.contentWindow.document;
+                } catch (e) {
+                    console.log("iframe loaded (cross-origin): " + url);
+                }
+            };
+            
+            iframe.onerror = function() {
+                container.innerHTML = '<div class="message">エラーが発生しました。URLが正しいか確認してください。</div>';
+            };
+
+            container.appendChild(iframe);
+        }
+    </script>
+
+</body>
+</html>
