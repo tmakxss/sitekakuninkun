@@ -340,56 +340,118 @@
             html += '</div>';
             
             // セキュリティヘッダーのチェック
-            const headerChecks = [
-                {
-                    name: 'Content-Security-Policy (CSP)',
-                    key: 'content-security-policy',
-                    description: 'XSS攻撃を防ぐセキュリティポリシー'
-                },
-                {
-                    name: 'Strict-Transport-Security (HSTS)',
-                    key: 'strict-transport-security',
-                    description: 'HTTPSの強制使用を指示'
-                },
-                {
-                    name: 'X-Frame-Options',
-                    key: 'x-frame-options',
-                    description: 'クリックジャッキング攻撃を防止'
-                },
-                {
-                    name: 'Cache-Control',
-                    key: 'cache-control',
-                    description: 'キャッシュの制御'
-                },
-                {
-                    name: 'X-Content-Type-Options',
-                    key: 'x-content-type-options',
-                    description: 'MIMEタイプスニッフィングを防止'
-                }
-            ];
-            
             html += '<div class="check-section"><h3>🛡️ セキュリティヘッダー</h3>';
             
-            headerChecks.forEach(check => {
-                const value = headers[check.key];
-                if (value) {
+            // CSP
+            const csp = headers['content-security-policy'];
+            if (csp) {
+                html += `<div class="check-item good">
+                    <span class="status-icon">✓</span>
+                    <div>
+                        <strong>Content-Security-Policy (CSP):</strong> ${csp}<br>
+                        <small style="color: #666;">XSS攻撃を防ぐセキュリティポリシー</small>
+                    </div>
+                </div>`;
+            } else {
+                html += `<div class="check-item warning">
+                    <span class="status-icon">⚠</span>
+                    <div>
+                        <strong>Content-Security-Policy (CSP):</strong> 設定されていません<br>
+                        <small style="color: #666;">XSS攻撃を防ぐセキュリティポリシー</small>
+                    </div>
+                </div>`;
+            }
+            
+            // HSTS
+            const hsts = headers['strict-transport-security'];
+            if (hsts) {
+                html += `<div class="check-item good">
+                    <span class="status-icon">✓</span>
+                    <div>
+                        <strong>Strict-Transport-Security (HSTS):</strong> ${hsts}<br>
+                        <small style="color: #666;">HTTPSの強制使用を指示</small>
+                    </div>
+                </div>`;
+            } else {
+                html += `<div class="check-item warning">
+                    <span class="status-icon">⚠</span>
+                    <div>
+                        <strong>Strict-Transport-Security (HSTS):</strong> 設定されていません<br>
+                        <small style="color: #666;">HTTPSの強制使用を指示</small>
+                    </div>
+                </div>`;
+            }
+            
+            // X-Frame-Options
+            const xframe = headers['x-frame-options'];
+            if (xframe) {
+                html += `<div class="check-item good">
+                    <span class="status-icon">✓</span>
+                    <div>
+                        <strong>X-Frame-Options:</strong> ${xframe}<br>
+                        <small style="color: #666;">クリックジャッキング攻撃を防止</small>
+                    </div>
+                </div>`;
+            } else {
+                html += `<div class="check-item warning">
+                    <span class="status-icon">⚠</span>
+                    <div>
+                        <strong>X-Frame-Options:</strong> 設定されていません<br>
+                        <small style="color: #666;">クリックジャッキング攻撃を防止</small>
+                    </div>
+                </div>`;
+            }
+            
+            // Cache-Control
+            const cacheControl = headers['cache-control'];
+            if (cacheControl) {
+                const hasNoStore = cacheControl.toLowerCase().includes('no-store');
+                if (hasNoStore) {
                     html += `<div class="check-item good">
                         <span class="status-icon">✓</span>
                         <div>
-                            <strong>${check.name}:</strong> ${value}<br>
-                            <small style="color: #666;">${check.description}</small>
+                            <strong>Cache-Control:</strong> ${cacheControl}<br>
+                            <small style="color: #666;">no-storeが設定されています（機密情報のキャッシュを防止）</small>
                         </div>
                     </div>`;
                 } else {
                     html += `<div class="check-item warning">
                         <span class="status-icon">⚠</span>
                         <div>
-                            <strong>${check.name}:</strong> 設定されていません<br>
-                            <small style="color: #666;">${check.description}</small>
+                            <strong>Cache-Control:</strong> ${cacheControl}<br>
+                            <small style="color: #666;">no-storeの設定がありません。機密情報を扱う場合は no-store を推奨</small>
                         </div>
                     </div>`;
                 }
-            });
+            } else {
+                html += `<div class="check-item warning">
+                    <span class="status-icon">⚠</span>
+                    <div>
+                        <strong>Cache-Control:</strong> 設定されていません<br>
+                        <small style="color: #666;">機密情報を扱う場合は no-store を推奨</small>
+                    </div>
+                </div>`;
+            }
+            
+            // X-Content-Type-Options
+            const nosniff = headers['x-content-type-options'];
+            if (nosniff) {
+                html += `<div class="check-item good">
+                    <span class="status-icon">✓</span>
+                    <div>
+                        <strong>X-Content-Type-Options:</strong> ${nosniff}<br>
+                        <small style="color: #666;">MIMEタイプスニッフィングを防止（※JSONレスポンスのみに設定される場合があります。HTMLページで手動確認を推奨）</small>
+                    </div>
+                </div>`;
+            } else {
+                html += `<div class="check-item warning">
+                    <span class="status-icon">⚠</span>
+                    <div>
+                        <strong>X-Content-Type-Options:</strong> 設定されていません<br>
+                        <small style="color: #666;">MIMEタイプスニッフィングを防止（※JSONレスポンスのみに設定される場合があります。HTMLページで手動確認を推奨）</small>
+                    </div>
+                </div>`;
+            }
             
             html += '</div>';
             
