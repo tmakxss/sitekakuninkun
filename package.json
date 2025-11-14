@@ -1,0 +1,8 @@
+{
+  "name": "sitekakuninkun",
+  "version": "1.0.0",
+  "description": "WebサイトのセキュリティヘッダーとSSL証明書情報をチェックするツール",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

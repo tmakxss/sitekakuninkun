@@ -1,7 +1,7 @@
 // Vercel Serverless Function
 // CORS制限を回避してヘッダー情報を取得
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   // CORS設定
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,7 +16,10 @@ export default async function handler(req, res) {
   const { url } = req.query;
 
   if (!url) {
-    return res.status(400).json({ error: 'URLパラメータが必要です' });
+    return res.status(400).json({ 
+      success: false,
+      error: 'URLパラメータが必要です' 
+    });
   }
 
   try {
@@ -24,22 +27,28 @@ export default async function handler(req, res) {
     const targetUrl = new URL(url);
     
     // HEADリクエストでヘッダー情報を取得
-    const response = await fetch(url, {
-      method: 'HEAD',
-      redirect: 'follow',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    }).catch(() => 
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'HEAD',
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': '*/*'
+        }
+      });
+    } catch (headError) {
       // HEADが失敗した場合はGETで試す
-      fetch(url, {
+      console.log('HEAD request failed, trying GET:', headError.message);
+      response = await fetch(url, {
         method: 'GET',
         redirect: 'follow',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         }
-      })
-    );
+      });
+    }
 
     // レスポンスヘッダーを取得
     const headers = {};
@@ -70,7 +79,8 @@ export default async function handler(req, res) {
       success: false,
       error: 'サイトの情報を取得できませんでした',
       message: error.message,
+      details: error.toString(),
       url: url
     });
   }
-}
+};
