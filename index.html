@@ -253,11 +253,14 @@
                 // 取得したヘッダー情報
                 const headers = data.headers || {};
                 
-                // SSL証明書情報
-                const sslInfo = checkSSL(url, data.ssl);
+                // SSL証明書情報を取得
+                let certData = null;
+                if (new URL(url).protocol === 'https:') {
+                    certData = await fetchCertificateInfo(new URL(url).hostname);
+                }
                 
                 // 結果を表示
-                displayResults(headers, sslInfo, url, data.statusCode);
+                displayResults(headers, certData, url, data.statusCode);
                 
             } catch (error) {
                 console.error('Security check error:', error);
@@ -279,6 +282,24 @@
                         ${getBasicChecks(url)}
                     </div>
                 `;
+            }
+        }
+        
+        // 証明書情報を取得
+        async function fetchCertificateInfo(hostname) {
+            try {
+                const apiUrl = `/api/certificate?hostname=${encodeURIComponent(hostname)}`;
+                const response = await fetch(apiUrl);
+                
+                if (!response.ok) {
+                    return null;
+                }
+                
+                const data = await response.json();
+                return data.success ? data : null;
+            } catch (error) {
+                console.error('Certificate fetch error:', error);
+                return null;
             }
         }
         
@@ -304,7 +325,7 @@
         }
         
         // 結果表示
-        function displayResults(headers, sslInfo, url, statusCode) {
+        function displayResults(headers, certData, url, statusCode) {
             const securityCheck = document.getElementById('securityCheck');
             
             // レスポンスステータス
@@ -374,7 +395,74 @@
             
             // SSL証明書情報
             html += '<div class="check-section"><h3>🔐 SSL/TLS証明書</h3>';
-            html += sslInfo;
+            
+            if (certData && certData.certificate) {
+                const cert = certData.certificate;
+                const security = certData.security;
+                
+                // セキュリティ評価
+                if (security.issues && security.issues.length > 0) {
+                    security.issues.forEach(issue => {
+                        html += `<div class="check-item bad">
+                            <span class="status-icon">✗</span>
+                            <span>${issue}</span>
+                        </div>`;
+                    });
+                }
+                
+                if (security.warnings && security.warnings.length > 0) {
+                    security.warnings.forEach(warning => {
+                        html += `<div class="check-item warning">
+                            <span class="status-icon">⚠</span>
+                            <span>${warning}</span>
+                        </div>`;
+                    });
+                }
+                
+                if (security.goodPoints && security.goodPoints.length > 0) {
+                    security.goodPoints.forEach(point => {
+                        html += `<div class="check-item good">
+                            <span class="status-icon">✓</span>
+                            <span>${point}</span>
+                        </div>`;
+                    });
+                }
+                
+                // 証明書の詳細情報
+                html += `<div class="check-item good" style="flex-direction: column; align-items: flex-start;">
+                    <span class="status-icon" style="display: inline;">📋</span>
+                    <strong>証明書の詳細:</strong>
+                    <div style="margin-left: 30px; margin-top: 10px; font-family: monospace; font-size: 13px;">
+                        <div><strong>発行先:</strong> ${cert.subject.CN || 'N/A'}</div>
+                        <div><strong>発行元:</strong> ${cert.issuer.O || 'N/A'} (${cert.issuer.CN || 'N/A'})</div>
+                        <div><strong>有効期限:</strong> ${new Date(cert.validFrom).toLocaleDateString('ja-JP')} ～ ${new Date(cert.validTo).toLocaleDateString('ja-JP')}</div>
+                        <div><strong>シリアル番号:</strong> ${cert.serialNumber}</div>
+                        ${cert.keySize ? `<div><strong>鍵のサイズ:</strong> ${cert.keySize}ビット</div>` : ''}
+                        ${cert.algorithm ? `<div><strong>署名アルゴリズム:</strong> ${cert.algorithm}</div>` : ''}
+                        <div><strong>SHA-256フィンガープリント:</strong><br>${cert.fingerprint256}</div>
+                        ${cert.subjectAltNames && cert.subjectAltNames.length > 0 ? 
+                            `<div><strong>サブジェクト代替名:</strong><br>${cert.subjectAltNames.join('<br>')}</div>` : ''}
+                    </div>
+                </div>`;
+                
+            } else {
+                const urlObj = new URL(url);
+                if (urlObj.protocol === 'https:') {
+                    html += `<div class="check-item warning">
+                        <span class="status-icon">⚠</span>
+                        <div>
+                            <strong>証明書情報を取得できませんでした</strong><br>
+                            <small style="color: #666;">ブラウザのアドレスバーの鍵アイコンから確認してください</small>
+                        </div>
+                    </div>`;
+                } else {
+                    html += `<div class="check-item bad">
+                        <span class="status-icon">✗</span>
+                        <span><strong>HTTP接続:</strong> 暗号化されていません（非推奨）</span>
+                    </div>`;
+                }
+            }
+            
             html += `<div class="check-item good">
                 <span class="status-icon">ℹ️</span>
                 <div>
@@ -417,39 +505,6 @@
             html += '</div>';
             
             securityCheck.innerHTML = html;
-        }
-        
-        // SSL証明書の基本チェック
-        function checkSSL(url, sslData) {
-            const urlObj = new URL(url);
-            let html = '';
-            
-            if (urlObj.protocol === 'https:' || (sslData && sslData.isHttps)) {
-                html += `<div class="check-item good">
-                    <span class="status-icon">✓</span>
-                    <span><strong>HTTPS接続:</strong> 暗号化通信を使用しています</span>
-                </div>`;
-                
-                html += `<div class="check-item good">
-                    <span class="status-icon">ℹ️</span>
-                    <div>
-                        <strong>証明書の詳細確認方法:</strong><br>
-                        <small style="color: #666;">
-                        1. ブラウザのアドレスバーの鍵アイコンをクリック<br>
-                        2. 発行者（Let's Encrypt, DigiCertなど信頼できる認証局か確認）<br>
-                        3. 有効期限（期限切れていないか確認）<br>
-                        4. 鍵の種類（RSA 2048bit以上、またはECDSAを推奨）
-                        </small>
-                    </div>
-                </div>`;
-            } else {
-                html += `<div class="check-item bad">
-                    <span class="status-icon">✗</span>
-                    <span><strong>HTTP接続:</strong> 暗号化されていません（非推奨）</span>
-                </div>`;
-            }
-            
-            return html;
         }
         
         // iframe読み込み
