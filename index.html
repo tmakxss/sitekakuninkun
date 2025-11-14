@@ -236,29 +236,37 @@
             securityCheck.innerHTML = '<div class="loading">🔍 チェック中...</div>';
             
             try {
-                // ヘッダー情報をチェック
-                const response = await fetch(url, { 
-                    method: 'HEAD',
-                    mode: 'cors'
-                }).catch(() => fetch(url, { mode: 'cors' }));
+                // バックエンドAPI経由でヘッダー情報を取得
+                const apiUrl = `/api/check?url=${encodeURIComponent(url)}`;
+                const response = await fetch(apiUrl);
                 
-                const headers = {};
-                for (let [key, value] of response.headers.entries()) {
-                    headers[key.toLowerCase()] = value;
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
                 }
                 
-                // SSL証明書情報（ブラウザ制限のため限定的）
-                const sslInfo = checkSSL(url);
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'データの取得に失敗しました');
+                }
+                
+                // 取得したヘッダー情報
+                const headers = data.headers || {};
+                
+                // SSL証明書情報
+                const sslInfo = checkSSL(url, data.ssl);
                 
                 // 結果を表示
-                displayResults(headers, sslInfo, url);
+                displayResults(headers, sslInfo, url, data.statusCode);
                 
             } catch (error) {
-                // CORS制限がある場合の代替チェック
+                console.error('Security check error:', error);
+                // エラー時のフォールバック表示
                 securityCheck.innerHTML = `
                     <div class="check-section">
-                        <h3>⚠️ CORS制限について</h3>
-                        <p>ブラウザのセキュリティ制限により、直接ヘッダー情報を取得できませんでした。</p>
+                        <h3>⚠️ 情報の取得について</h3>
+                        <p>サイトの情報を取得できませんでした。</p>
+                        <p><strong>エラー:</strong> ${error.message}</p>
                         <p>より詳細なチェックを行うには、以下の方法があります：</p>
                         <ul>
                             <li>ブラウザの開発者ツール（F12）でネットワークタブを確認</li>
@@ -296,8 +304,19 @@
         }
         
         // 結果表示
-        function displayResults(headers, sslInfo, url) {
+        function displayResults(headers, sslInfo, url, statusCode) {
             const securityCheck = document.getElementById('securityCheck');
+            
+            // レスポンスステータス
+            let html = '<div class="check-section"><h3>📡 接続情報</h3>';
+            if (statusCode) {
+                const statusClass = statusCode < 400 ? 'good' : 'bad';
+                html += `<div class="check-item ${statusClass}">
+                    <span class="status-icon">${statusCode < 400 ? '✓' : '✗'}</span>
+                    <span><strong>HTTPステータス:</strong> ${statusCode}</span>
+                </div>`;
+            }
+            html += '</div>';
             
             // セキュリティヘッダーのチェック
             const headerChecks = [
@@ -328,7 +347,7 @@
                 }
             ];
             
-            let html = '<div class="check-section"><h3>🛡️ セキュリティヘッダー</h3>';
+            html += '<div class="check-section"><h3>🛡️ セキュリティヘッダー</h3>';
             
             headerChecks.forEach(check => {
                 const value = headers[check.key];
@@ -376,9 +395,11 @@
                 'cross-origin-embedder-policy'
             ];
             
+            let hasOtherHeaders = false;
             otherHeaders.forEach(headerKey => {
                 const value = headers[headerKey];
                 if (value) {
+                    hasOtherHeaders = true;
                     html += `<div class="check-item good">
                         <span class="status-icon">✓</span>
                         <span><strong>${headerKey}:</strong> ${value}</span>
@@ -386,27 +407,39 @@
                 }
             });
             
+            if (!hasOtherHeaders) {
+                html += `<div class="check-item warning">
+                    <span class="status-icon">ℹ️</span>
+                    <span>追加のセキュリティヘッダーは設定されていません</span>
+                </div>`;
+            }
+            
             html += '</div>';
             
             securityCheck.innerHTML = html;
         }
         
         // SSL証明書の基本チェック
-        function checkSSL(url) {
+        function checkSSL(url, sslData) {
             const urlObj = new URL(url);
             let html = '';
             
-            if (urlObj.protocol === 'https:') {
+            if (urlObj.protocol === 'https:' || (sslData && sslData.isHttps)) {
                 html += `<div class="check-item good">
                     <span class="status-icon">✓</span>
                     <span><strong>HTTPS接続:</strong> 暗号化通信を使用しています</span>
                 </div>`;
                 
-                html += `<div class="check-item warning">
+                html += `<div class="check-item good">
                     <span class="status-icon">ℹ️</span>
                     <div>
-                        <strong>証明書の詳細:</strong> ブラウザのアドレスバーの鍵アイコンをクリックして確認してください<br>
-                        <small style="color: #666;">発行者、有効期限、鍵の種類などを確認できます</small>
+                        <strong>証明書の詳細確認方法:</strong><br>
+                        <small style="color: #666;">
+                        1. ブラウザのアドレスバーの鍵アイコンをクリック<br>
+                        2. 発行者（Let's Encrypt, DigiCertなど信頼できる認証局か確認）<br>
+                        3. 有効期限（期限切れていないか確認）<br>
+                        4. 鍵の種類（RSA 2048bit以上、またはECDSAを推奨）
+                        </small>
                     </div>
                 </div>`;
             } else {
